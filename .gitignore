@@ -1,0 +1,7 @@
+# Секреты и локальные пути
+shiki_tokens.json
+vault.path
+
+# Артефакты синхронизации
+shiki_cache/
+shiki-sync.log
