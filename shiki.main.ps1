@@ -125,6 +125,7 @@ Write-Host ("  В карте деталей: {0} тайтлов" -f $details.Key
 $cookie    = Get-Cfg $cfg 'ShikiCookie'   $null
 $minBytes  = [int](Get-Cfg $cfg 'MinPosterBytes' 15000)
 $cacheBust = [bool](Get-Cfg $cfg 'CacheBust' $true)
+$posterPreferScreenshot = [bool](Get-Cfg $cfg 'PosterPreferScreenshot' $true)
 
 Write-Host "[6/8] Запись заметок Markdown и очередь на скачивание постеров..."
 $posterQueue = New-Object System.Collections.ArrayList
@@ -145,7 +146,8 @@ foreach($rate in $allRates){
             -Base $cfg.Base `
             -LinkBase $cfg.LinkSiteUrl `
             -StaticBase $cfg.StaticBase `
-            -MaxScore $cfg.MaxScore
+            -MaxScore $cfg.MaxScore `
+            -PosterPreferScreenshot:$posterPreferScreenshot
 
   if($info.PosterUrls -and $info.PosterUrls.Count -gt 0 -and $info.PosterPath){
     [void]$posterQueue.Add([pscustomobject]@{

@@ -77,7 +77,8 @@ function New-AnimeNote {
     [string]$Base,
     [string]$LinkBase,
     [string]$StaticBase,
-    [double]$MaxScore
+    [double]$MaxScore,
+    [bool]$PosterPreferScreenshot = $true
   )
 
   $aid=$Rate.anime.id
@@ -109,59 +110,70 @@ function New-AnimeNote {
     return ($s -like '*/assets/globals/missing*' -or $s -like '*/missing_*')
   }
 
-  # Основной источник + ВСЕ фоллбэки
-  $posterUrls = @()
+  # Кандидаты на обложку: у сиквелов часто одинаковый image.* (постер франшизы), а screenshots — разные на каждую карточку.
+  $posterUrls = [System.Collections.Generic.List[string]]::new()
+  $seenUrl = @{}
   $bases=@()
   if($Base){ $bases+=$Base }
   if($StaticBase){ $bases+=$StaticBase }
   $bases = $bases | Select-Object -Unique
 
-  # Основной источник: image.original и image.preview
-  if($Anime.image){
-    $orig = $Anime.image.original
-    $prev = $Anime.image.preview
-    
-    if($orig -and -not (& $isMissing $orig)){
-      foreach($b in $bases){ $posterUrls += ( $orig.StartsWith("http") ? $orig : "$b$orig" ) }
-    }
-    
-    if($prev -and -not (& $isMissing $prev)){
-      foreach($b in $bases){ $posterUrls += ( $prev.StartsWith("http") ? $prev : "$b$prev" ) }
+  $addUrl = {
+    param([string]$path)
+    if(-not $path -or (& $isMissing $path)){ return }
+    foreach($b in $bases){
+      $u = if($path.StartsWith("http")){ $path } else { "$b$path" }
+      if(-not $seenUrl.ContainsKey($u)){ $seenUrl[$u] = $true; [void]$posterUrls.Add($u) }
     }
   }
 
-  # Фоллбэк на image.x48, x96, x148, x296
-  if($posterUrls.Count -eq 0 -and $Anime.image){
-    @('x296', 'x148', 'x96', 'x48') | ForEach-Object {
-      if($posterUrls.Count -eq 0){
-        $field = $Anime.image.$_
-        if($field -and -not (& $isMissing $field)){
-          foreach($b in $bases){ $posterUrls += ( $field.StartsWith("http") ? $field : "$b$field" ) }
+  function Add-ScreenshotCandidates {
+    param($Screen)
+    if(-not $Screen){ return }
+    foreach($fld in @('x296','preview','original','x148','x96')){
+      $p = $Screen.$fld
+      if($p){ & $addUrl $p }
+    }
+  }
+
+  function Add-ImageCandidates {
+    param($Img)
+    if(-not $Img){ return }
+    foreach($fld in @('preview','x296','x148','x96','x48','original')){
+      $p = $Img.$fld
+      if($p){ & $addUrl $p }
+    }
+  }
+
+  if($PosterPreferScreenshot){
+    if($Anime.screenshots -and $Anime.screenshots.Count -gt 0){
+      Add-ScreenshotCandidates $Anime.screenshots[0]
+      if($Anime.screenshots.Count -gt 1){ Add-ScreenshotCandidates $Anime.screenshots[1] }
+    }
+    if($Anime.image){ Add-ImageCandidates $Anime.image }
+  }
+  else {
+    if($Anime.image){
+      $orig = $Anime.image.original
+      $prev = $Anime.image.preview
+      if($orig -and -not (& $isMissing $orig)){ & $addUrl $orig }
+      if($prev -and -not (& $isMissing $prev)){ & $addUrl $prev }
+    }
+    if($posterUrls.Count -eq 0 -and $Anime.image){
+      @('x296', 'x148', 'x96', 'x48') | ForEach-Object {
+        if($posterUrls.Count -eq 0){
+          $field = $Anime.image.$_
+          if($field -and -not (& $isMissing $field)){ & $addUrl $field }
         }
       }
     }
-  }
-
-  # 3️⃣ Фоллбэк на screenshot[0].original если основной источник пуст
-  if($posterUrls.Count -eq 0 -and $Anime.screenshots -and $Anime.screenshots.Count -gt 0){
-    $screenOrig = $Anime.screenshots[0].original
-    if($screenOrig -and -not (& $isMissing $screenOrig)){
-      foreach($b in $bases){ $posterUrls += ( $screenOrig.StartsWith("http") ? $screenOrig : "$b$screenOrig" ) }
+    if($posterUrls.Count -eq 0 -and $Anime.screenshots -and $Anime.screenshots.Count -gt 0){
+      Add-ScreenshotCandidates $Anime.screenshots[0]
+      if($posterUrls.Count -eq 0 -and $Anime.screenshots.Count -gt 1){ Add-ScreenshotCandidates $Anime.screenshots[1] }
     }
   }
 
-  # Фоллбэк на screenshot[0] с другими размерами
-  if($posterUrls.Count -eq 0 -and $Anime.screenshots -and $Anime.screenshots.Count -gt 0){
-    $screen = $Anime.screenshots[0]
-    @('x296', 'x148', 'x96', 'preview') | ForEach-Object {
-      if($posterUrls.Count -eq 0 -and $screen.$_){
-        $url = $screen.$_
-        if($url -and -not (& $isMissing $url)){
-          foreach($b in $bases){ $posterUrls += ( $url.StartsWith("http") ? $url : "$b$url" ) }
-        }
-      }
-    }
-  }
+  $posterUrls = @($posterUrls)
 
   # Рейтинг аудитории
   $ratingCanonical = $null

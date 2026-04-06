@@ -20,4 +20,6 @@
   ShikiCookie     = ""
   MinPosterBytes  = 8000
   CacheBust       = $true
+  # Сначала скриншоты с карточки, потом image.* — у сиквелов чаще разные кадры, чем общий постер франшизы.
+  PosterPreferScreenshot = $true
 }
