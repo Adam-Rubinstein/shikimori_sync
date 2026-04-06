@@ -1,3 +1,6 @@
+# Cursor (локально; не в репозитории)
+.cursor/
+
 # Секреты и локальные пути
 shiki_tokens.json
 vault.path
