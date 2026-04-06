@@ -18,6 +18,15 @@ pwsh -File .\shiki.main.ps1
 
 Транскрипт пишется в `shiki-sync.log` (или путь из `TranscriptPath` в конфиге).
 
+## Тесты (Pester 5)
+
+Юнит-тесты без сети и vault — каталог `tests/`. Установка и запуск:
+
+```powershell
+Install-Module Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck
+Invoke-Pester -Path ./tests -Output Detailed
+```
+
 ## Конфигурация (`shiki.config.psd1`)
 
 | Ключ | Назначение |
