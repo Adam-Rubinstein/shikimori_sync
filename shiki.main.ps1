@@ -87,6 +87,10 @@ Import-Module (Join-Path $ROOT 'shiki.shiki.psm1')  -Force -DisableNameChecking
 Import-Module (Join-Path $ROOT 'shiki.notes.psm1')  -Force -DisableNameChecking
 Import-Module (Join-Path $ROOT 'shiki.notify.psm1') -Force -DisableNameChecking
 $httpModulePath = Join-Path $ROOT 'shiki.http.psm1'
+$shikiModulePath = Join-Path $ROOT 'shiki.shiki.psm1'
+$detailBatchSize = [int](Get-Cfg $cfg 'BatchSize' 50)
+$detailParallel  = [int](Get-Cfg $cfg 'DetailThrottle' 3)
+if ($detailParallel -lt 1) { $detailParallel = 1 }
 
 Write-Host "[1/8] Старт — данные с API: $($cfg.Base) (CDN постеров: $($cfg.StaticBase))"
 Write-Host "[2/8] OAuth и профиль пользователя..."
@@ -101,18 +105,19 @@ Write-Host ("  Всего записей в списке: {0}" -f $allRates.Coun
 $ids = @($allRates | ForEach-Object { [int]$_.anime.id }) | Select-Object -Unique
 Write-Host "[4/8] Уникальных тайтлов для карточек: $($ids.Count)"
 
-Write-Host "[5/8] Детали аниме (кэш на диске + запросы к API; при ~600 тайтлах это самый долгий шаг)..."
+Write-Host "[5/8] Детали аниме (кэш на диске + запросы к API; батч $detailBatchSize, параллель до $detailParallel)..."
 $details = Get-ShikiDetailsBatched `
              -Base $cfg.Base `
              -Tokens $tokens `
              -UA $cfg.UA `
              -Ids $ids `
-             -BatchSize 25 `
-             -Throttle 1 `
+             -BatchSize $detailBatchSize `
+             -Throttle $detailParallel `
              -CacheDir $CacheDir `
              -ProgressStep 5 `
              -ProgressTotal 8 `
-             -TranscriptPath $TranscriptPath
+             -TranscriptPath $TranscriptPath `
+             -ModulePath $shikiModulePath
 
 Write-Host ("  В карте деталей: {0} тайтлов" -f $details.Keys.Count)
 

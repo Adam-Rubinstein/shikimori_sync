@@ -11,7 +11,8 @@
   # CDN обложек; можно не трогать. Переопределите, если у инстанса другой хост картинок.
   StaticUrl       = "https://desu.shikimori.one"
 
-  DetailThrottle  = 3
+  # Одновременных запросов /api/animes/{id} (только PS7+). При 429 уменьшите до 2–3.
+  DetailThrottle  = 5
   PosterThrottle  = 12
   BatchSize       = 50
   MaxScore        = 20
