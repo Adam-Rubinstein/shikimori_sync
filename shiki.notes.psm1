@@ -75,11 +75,13 @@ function New-AnimeNote {
     [string]$Vault,
     [string]$PostersDir,
     [string]$Base,
+    [string]$LinkBase,
     [string]$StaticBase,
     [double]$MaxScore
   )
 
   $aid=$Rate.anime.id
+  $linkRoot = if ([string]::IsNullOrWhiteSpace($LinkBase)) { $Base.Trim().TrimEnd('/') } else { $LinkBase.Trim().TrimEnd('/') }
   $ru=$Anime.russian; $en=$Anime.name
   $ttl=if($ru){$ru}elseif($en){$en}else{"Anime $aid"}
   if([string]::IsNullOrWhiteSpace($ttl) -or $ttl -eq "Untitled"){ $ttl="Anime $aid" }
@@ -203,7 +205,7 @@ function New-AnimeNote {
   $yaml+="name: ""$ttl"""
   $yaml+=('tags: ["{0}"]' -f ($baseTags -join '","'))
   $yaml+="shikimori_id: $aid"
-  $yaml+="shikimori_url: ""$Base/animes/$aid"""
+  $yaml+="shikimori_url: ""$linkRoot/animes/$aid"""
   $yaml+="cover: ""$posterRel"""
   if($Rate.status){        $yaml+="status: ""$($Rate.status)""" }
   if($myScore -ne $null){  $yaml+="my_score: $myScore"; $yaml+="my_score_source: ""$scoreSource""" }

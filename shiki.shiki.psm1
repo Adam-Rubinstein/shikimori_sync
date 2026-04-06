@@ -1,5 +1,30 @@
 # Shikimori API wrappers with disk cache + self-contained retry logic
 
+function Get-ShikiAnimeDisplayTitle {
+  param($Obj)
+  if (-not $Obj) { return '?' }
+  $ru = $Obj.russian
+  $en = $Obj.name
+  if ($ru -and "$ru".Trim()) { return $ru.Trim() }
+  if ($en -and "$en".Trim()) { return $en.Trim() }
+  return ('id {0}' -f $Obj.id)
+}
+
+function Write-ShikiLogOnly {
+  param([string]$TranscriptPath, [string]$Line)
+  if ([string]::IsNullOrWhiteSpace($TranscriptPath)) { return }
+  try {
+    Add-Content -LiteralPath $TranscriptPath -Value $Line -Encoding utf8 -ErrorAction Stop
+  } catch { }
+}
+
+function Write-ShikiAnimeConsole {
+  param([int]$Id, $Data, [ValidateSet('кэш','API')][string]$Source)
+  $t = Get-ShikiAnimeDisplayTitle $Data
+  if ($t.Length -gt 90) { $t = $t.Substring(0, 87) + '...' }
+  Write-Host ("  {0,6}  {1}  [{2}]" -f $Id, $t, $Source)
+}
+
 function Invoke-JsonWithRetry {
   param(
     [string]$Url,
@@ -80,6 +105,7 @@ function Get-ShikiDetailsBatched {
     [int]$CacheTtlHours = 336,
     [int]$ProgressStep = 5,
     [int]$ProgressTotal = 8,
+    [string]$TranscriptPath = $null,
     [switch]$VerboseCacheLog
   )
   $hdr = @{
@@ -92,7 +118,8 @@ function Get-ShikiDetailsBatched {
     try{ New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null }catch{}
   }
   Write-Host ("Кэш деталей: {0}" -f $CacheDir)
-  
+  if ($TranscriptPath) { Write-ShikiLogOnly -TranscriptPath $TranscriptPath -Line ('# Get-ShikiDetailsBatched: CACHE_DIR={0}' -f $CacheDir) }
+
   $now = Get-Date
   $out=@{}
   $cacheWritten = 0
@@ -104,8 +131,6 @@ function Get-ShikiDetailsBatched {
   for($i=0;$i -lt $Ids.Count;$i+=$BatchSize){
     $slice = $Ids[$i..([math]::Min($i+$BatchSize-1,$Ids.Count-1))]
     $batchEnd = [math]::Min($i+$BatchSize,$Ids.Count)
-
-    Write-Host ("[{0}/{1}] Детали аниме: записи {2}–{3} из {4} (кэш или API)" -f $ProgressStep, $ProgressTotal, ($i+1), $batchEnd, $Ids.Count)
 
     $pending = New-Object System.Collections.Generic.List[Object]
     foreach($aid in $slice){
@@ -122,6 +147,7 @@ function Get-ShikiDetailsBatched {
                 $out[$aid] = $data
                 $cached = $true
                 $processedTotal++
+                Write-ShikiAnimeConsole -Id $aid -Data $data -Source 'кэш'
                 Write-Progress -Id 1 -Activity ("Шаг {0}/{1} — детали аниме" -f $ProgressStep, $ProgressTotal) -Status ("Обработано {0} из {1}" -f $processedTotal, $Ids.Count) -CurrentOperation ("Из кэша: id {0}" -f $aid) -PercentComplete ([int]([math]::Min(100, 100.0 * $processedTotal / $idTotal)))
               }
             }
@@ -136,6 +162,7 @@ function Get-ShikiDetailsBatched {
     # Последовательная обработка БЕЗ -Parallel
     foreach($aid in $pending){
       $aid = [int]$aid
+      $data = $null
       try{
         $url = "$Base/api/animes/$aid"
         $data = Invoke-JsonWithRetry -Url $url -Headers $hdr -Method GET
@@ -149,7 +176,8 @@ function Get-ShikiDetailsBatched {
               $json = $data | ConvertTo-Json -Depth 10 -Compress:$false -ErrorAction Stop
               $json | Out-File -Encoding utf8 -FilePath $cachePath -Force -ErrorAction Stop
               $cacheWritten++
-              if ($VerboseCacheLog) { Write-Host "CACHE_OK: ID=$aid" }
+              Write-ShikiLogOnly -TranscriptPath $TranscriptPath -Line "CACHE_OK: ID=$aid"
+              if ($VerboseCacheLog) { Write-ShikiLogOnly -TranscriptPath $TranscriptPath -Line "VERBOSE CACHE_OK (API write): ID=$aid" }
             }catch{
               $cacheFailed++
               Write-Host "CACHE_FAIL: ID=$aid error=$_"
@@ -157,11 +185,16 @@ function Get-ShikiDetailsBatched {
           }
         } else {
           Write-Host "CACHE_NO_DATA: ID=$aid (empty or no name)"
+          Write-ShikiLogOnly -TranscriptPath $TranscriptPath -Line "CACHE_NO_DATA: ID=$aid (empty or no name)"
         }
       }catch{
         Write-Host "API_ERROR: ID=$aid error=$_"
+        Write-ShikiLogOnly -TranscriptPath $TranscriptPath -Line "API_ERROR: ID=$aid error=$_"
       }
       finally {
+        if ($data -and $data.id -and $data.name) {
+          Write-ShikiAnimeConsole -Id $aid -Data $data -Source 'API'
+        }
         $processedTotal++
         Write-Progress -Id 1 -Activity ("Шаг {0}/{1} — детали аниме" -f $ProgressStep, $ProgressTotal) -Status ("Обработано {0} из {1}" -f $processedTotal, $Ids.Count) -CurrentOperation ("API: id {0}" -f $aid) -PercentComplete ([int]([math]::Min(100, 100.0 * $processedTotal / $idTotal)))
       }

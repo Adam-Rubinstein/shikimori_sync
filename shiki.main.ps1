@@ -40,6 +40,10 @@ if (-not $_static) { $_static = Normalize-ShikiUrl (Get-Cfg $cfg 'StaticBase' $n
 if (-not $_static) { $_static = 'https://desu.shikimori.one' }
 $cfg.StaticBase = $_static
 
+$_link = Normalize-ShikiUrl (Get-Cfg $cfg 'LinkSiteUrl' $null)
+if (-not $_link) { $_link = $cfg.Base }
+$cfg.LinkSiteUrl = $_link
+
 # ---------- Vault из vault.path ----------
 $vaultPathFile = Join-Path $ROOT 'vault.path'
 if (-not (Test-Path $vaultPathFile)) { throw "vault.path not found: $vaultPathFile" }
@@ -107,7 +111,8 @@ $details = Get-ShikiDetailsBatched `
              -Throttle 1 `
              -CacheDir $CacheDir `
              -ProgressStep 5 `
-             -ProgressTotal 8
+             -ProgressTotal 8 `
+             -TranscriptPath $TranscriptPath
 
 Write-Host ("  В карте деталей: {0} тайтлов" -f $details.Keys.Count)
 
@@ -133,6 +138,7 @@ foreach($rate in $allRates){
             -Vault $vault `
             -PostersDir $PostersDir `
             -Base $cfg.Base `
+            -LinkBase $cfg.LinkSiteUrl `
             -StaticBase $cfg.StaticBase `
             -MaxScore $cfg.MaxScore
 

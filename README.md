@@ -26,6 +26,7 @@ pwsh -File .\shiki.main.ps1
 | `PostersRel` | Папка для JPG постеров относительно vault. |
 | `UA` | User-Agent для HTTP и API. |
 | `SiteUrl` | **Основной URL сайта и API** (без завершающего `/`). Меняйте при смене домена, например `https://shikimori.io`. Внутри скрипта попадает в `Base`. |
+| `LinkSiteUrl` | Базовый URL для поля **`shikimori_url`** в заметках Obsidian (страницы вида `/animes/{id}`). Если пусто — как `SiteUrl`. Укажите `https://shikimori.io`, если в YAML ещё остаётся старый домен. |
 | `StaticUrl` | База CDN для обложек (по умолчанию `https://desu.shikimori.one`). Внутри — `StaticBase`. |
 | `Base` / `StaticBase` | Устаревшие имена; если заданы без `SiteUrl`/`StaticUrl`, всё ещё читаются для совместимости. |
 | `PosterThrottle` | Параллельность загрузки постеров (только при PS7+, `ForEach-Object -Parallel`). |
