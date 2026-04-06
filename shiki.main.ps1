@@ -84,20 +84,20 @@ Import-Module (Join-Path $ROOT 'shiki.notes.psm1')  -Force -DisableNameChecking
 Import-Module (Join-Path $ROOT 'shiki.notify.psm1') -Force -DisableNameChecking
 $httpModulePath = Join-Path $ROOT 'shiki.http.psm1'
 
-Write-Host "[1/8] Старт"
-
-# ---------- 1) Токены и профиль ----------
+Write-Host "[1/8] Старт — данные с API: $($cfg.Base) (CDN постеров: $($cfg.StaticBase))"
+Write-Host "[2/8] OAuth и профиль пользователя..."
 $tokens  = Get-ShikiTokens -Path $TokensPath -Base $cfg.Base -UA $cfg.UA
 $profile = Get-ShikiProfile -Base $cfg.Base -Tokens $tokens -UA $cfg.UA
+Write-Host ("  Профиль: {0} (user id={1})" -f $profile.nickname, $profile.id)
 
-# ---------- 2) Все оценки ----------
+Write-Host "[3/8] Загрузка списка оценок с сайта..."
 $allRates = Get-ShikiAllRates -Base $cfg.Base -Tokens $tokens -UA $cfg.UA -UserId $profile.id
-Write-Host ("Всего элементов: {0}" -f $allRates.Count)
+Write-Host ("  Всего записей в списке: {0}" -f $allRates.Count)
 
-# ---------- 3) Детали тайтлов с кэшем ----------
 $ids = @($allRates | ForEach-Object { [int]$_.anime.id }) | Select-Object -Unique
-Write-Host ("Уникальных тайтлов: {0}" -f $ids.Count)
+Write-Host "[4/8] Уникальных тайтлов для карточек: $($ids.Count)"
 
+Write-Host "[5/8] Детали аниме (кэш на диске + запросы к API; при ~600 тайтлах это самый долгий шаг)..."
 $details = Get-ShikiDetailsBatched `
              -Base $cfg.Base `
              -Tokens $tokens `
@@ -105,16 +105,18 @@ $details = Get-ShikiDetailsBatched `
              -Ids $ids `
              -BatchSize 25 `
              -Throttle 1 `
-             -CacheDir $CacheDir
+             -CacheDir $CacheDir `
+             -ProgressStep 5 `
+             -ProgressTotal 8
 
-Write-Host ("Деталей получено: {0}" -f $details.Keys.Count)
+Write-Host ("  В карте деталей: {0} тайтлов" -f $details.Keys.Count)
 
-# ---------- 4) Параметры загрузчика постеров ----------
+# ---------- Параметры загрузчика постеров ----------
 $cookie    = Get-Cfg $cfg 'ShikiCookie'   $null
 $minBytes  = [int](Get-Cfg $cfg 'MinPosterBytes' 15000)
 $cacheBust = [bool](Get-Cfg $cfg 'CacheBust' $true)
 
-# ---------- 5) Генерация заметок и очередь постеров ----------
+Write-Host "[6/8] Запись заметок Markdown и очередь на скачивание постеров..."
 $posterQueue = New-Object System.Collections.ArrayList
 
 foreach($rate in $allRates){
@@ -148,10 +150,9 @@ foreach($rate in $allRates){
   }
 }
 
-# ---------- 6) Загрузка постеров ----------
 $posterResults=@()
 if($posterQueue.Count -gt 0){
-  Write-Host ("`nСкачиваем постеры: {0} шт., пул {1}" -f $posterQueue.Count, $cfg.PosterThrottle)
+  Write-Host ("[7/8] Скачивание постеров: {0} файлов (параллельность {1})..." -f $posterQueue.Count, $cfg.PosterThrottle)
 
   if($PSVersionTable.PSVersion.Major -ge 7){
     $posterResults = $posterQueue | ForEach-Object -Parallel {
@@ -185,9 +186,11 @@ if($posterQueue.Count -gt 0){
   }
 }
 
-# ---------- Итог ----------
 $okCount  = @($posterResults | Where-Object { $_.ok }).Count
 $allCount = $posterQueue.Count
-Write-Host ("Готово: постеров скачано {0}/{1}" -f $okCount, $allCount)
+if ($posterQueue.Count -eq 0) {
+  Write-Host "[7/8] Постеры: очередь пуста (обложки не требовались или нет URL)."
+}
+Write-Host ("[8/8] Готово. Постеров успешно: {0}/{1}. Деталей аниме в карте: {2}." -f $okCount, $allCount, $details.Keys.Count)
 
 Stop-Transcript

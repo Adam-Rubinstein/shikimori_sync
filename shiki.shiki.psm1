@@ -77,7 +77,10 @@ function Get-ShikiDetailsBatched {
     [int]$BatchSize=50,
     [int]$Throttle=3,
     [string]$CacheDir,
-    [int]$CacheTtlHours = 336
+    [int]$CacheTtlHours = 336,
+    [int]$ProgressStep = 5,
+    [int]$ProgressTotal = 8,
+    [switch]$VerboseCacheLog
   )
   $hdr = @{
     'Authorization' = "Bearer $($Tokens.access_token)"
@@ -88,18 +91,21 @@ function Get-ShikiDetailsBatched {
   if($CacheDir){
     try{ New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null }catch{}
   }
-  Write-Host "CACHE_DIR: $CacheDir"
+  Write-Host ("Кэш деталей: {0}" -f $CacheDir)
   
   $now = Get-Date
   $out=@{}
   $cacheWritten = 0
   $cacheFailed = 0
   $cacheDeleted = 0
+  $processedTotal = 0
+  $idTotal = [math]::Max(1, $Ids.Count)
 
   for($i=0;$i -lt $Ids.Count;$i+=$BatchSize){
     $slice = $Ids[$i..([math]::Min($i+$BatchSize-1,$Ids.Count-1))]
+    $batchEnd = [math]::Min($i+$BatchSize,$Ids.Count)
 
-    try { Write-Host ("[6/8] Детали: {0}-{1} из {2}" -f $i,([math]::Min($i+$BatchSize,$Ids.Count)),$Ids.Count) } catch {}
+    Write-Host ("[{0}/{1}] Детали аниме: записи {2}–{3} из {4} (кэш или API)" -f $ProgressStep, $ProgressTotal, ($i+1), $batchEnd, $Ids.Count)
 
     $pending = New-Object System.Collections.Generic.List[Object]
     foreach($aid in $slice){
@@ -115,6 +121,8 @@ function Get-ShikiDetailsBatched {
               if($data -and $data.id){
                 $out[$aid] = $data
                 $cached = $true
+                $processedTotal++
+                Write-Progress -Id 1 -Activity ("Шаг {0}/{1} — детали аниме" -f $ProgressStep, $ProgressTotal) -Status ("Обработано {0} из {1}" -f $processedTotal, $Ids.Count) -CurrentOperation ("Из кэша: id {0}" -f $aid) -PercentComplete ([int]([math]::Min(100, 100.0 * $processedTotal / $idTotal)))
               }
             }
           }catch{}
@@ -141,7 +149,7 @@ function Get-ShikiDetailsBatched {
               $json = $data | ConvertTo-Json -Depth 10 -Compress:$false -ErrorAction Stop
               $json | Out-File -Encoding utf8 -FilePath $cachePath -Force -ErrorAction Stop
               $cacheWritten++
-              Write-Host "CACHE_OK: ID=$aid"
+              if ($VerboseCacheLog) { Write-Host "CACHE_OK: ID=$aid" }
             }catch{
               $cacheFailed++
               Write-Host "CACHE_FAIL: ID=$aid error=$_"
@@ -153,8 +161,14 @@ function Get-ShikiDetailsBatched {
       }catch{
         Write-Host "API_ERROR: ID=$aid error=$_"
       }
+      finally {
+        $processedTotal++
+        Write-Progress -Id 1 -Activity ("Шаг {0}/{1} — детали аниме" -f $ProgressStep, $ProgressTotal) -Status ("Обработано {0} из {1}" -f $processedTotal, $Ids.Count) -CurrentOperation ("API: id {0}" -f $aid) -PercentComplete ([int]([math]::Min(100, 100.0 * $processedTotal / $idTotal)))
+      }
     }
   }
+  
+  Write-Progress -Id 1 -Activity ("Шаг {0}/{1} — детали аниме" -f $ProgressStep, $ProgressTotal) -Completed
   
   # Удаляем кэшированные файлы, которые больше не в списке (удалены на сайте)
   if($CacheDir -and (Test-Path $CacheDir)){
